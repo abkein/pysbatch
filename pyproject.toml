@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pysbatch"
+name = "pysbatch-ng"
 version = "0.0.1"
 authors = [{ name = "Egor Perevoshchikov", email = "abkein@abkein.ru" }]
 description = "A package for continiously running LAMMPS on HPC systems with SLURM workload manager, where execution time is limited"
