@@ -1,0 +1,9 @@
+[Mpoll]
+cwd = "./"
+jobid = 123456
+tag = 11111
+logfolder = "log/slurm"
+logto = "file"
+cmd = "echo \"It works!\""
+every = 5
+tc = 288

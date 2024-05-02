@@ -6,20 +6,34 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 25-09-2023 20:45:06
+# Last modified: 21-04-2024 23:13:50
 
 import re
+import logging
 from pathlib import Path
-from logging import Logger
-from typing import Dict, Union, Any
-from MPMU import wexec, config
+from typing import Dict, Union
+from MPMU import wexec, confdict
 
 from .config import configure
 from . import constants as cs
 
 
-# def run(cwd: Path, logger: Logger, conf: config[str, Any], opt: Union[int, None] = None, add_conf: Union[Dict, None] = None) -> int:
-def run(cwd: Path, logger: Logger, conf: config, opt: Union[int, None] = None, add_conf: Union[Dict, None] = None) -> int:
+def run(cwd: Path, logger: logging.Logger, conf: confdict, number: Union[int, None] = None, add_conf: Union[Dict, None] = None, return_dir: bool = False) -> int:
+    """Runs sbatch command via creating .job file
+
+    Args:
+        cwd (Path): current working directory
+        logger (logging.Logger): Logger object
+        conf (config): configuration
+        number (Union[int, None], optional): Number of task. At this stage there is no jobid yet, so it used instead. Defaults to None.
+        add_conf (Union[Dict, None], optional): Additional configuration, it merged to main configuration. Defaults to None.
+
+    Raises:
+        RuntimeError: Raised if sbatch command not returned jobid (or function cannot parse it from output)
+
+    Returns:
+        jobid (int): slurm's jobid
+    """
     logger.debug("Preparing...")
     if add_conf is not None:
         for k, v in add_conf.items():
@@ -27,14 +41,14 @@ def run(cwd: Path, logger: Logger, conf: config, opt: Union[int, None] = None, a
 
     logger.debug('Configuring...')
     configure(conf, logger.getChild('configure'))
-    if opt is not None:
-        tdir = cwd / cs.folders.run / (cs.ps.jname + str(opt))
+    if number is not None:
+        tdir = cwd / cs.folders.run / (cs.ps.jname + str(number))
     else:
         tdir = cwd / cs.folders.run / cs.ps.jname
     tdir.mkdir(parents=True, exist_ok=True)
 
     conf['jd'] = tdir.as_posix()
-    conf.sreconf()
+    conf.self_reconf()
 
     job_file = tdir / f"{cs.ps.jname}.job"
 
@@ -62,15 +76,21 @@ def run(cwd: Path, logger: Logger, conf: config, opt: Union[int, None] = None, a
     bout = wexec(cmd, logger.getChild('sbatch'))
 
     if re.match(cs.re.sbatch_jobid, bout):
-        *beg, num = bout.split()
-        print("Sbatch jobid: ", num)
-        logger.info(f"Sbatch jobid: {num}")
+        *beg, jobid_s = bout.split()
+        try:
+            jobid = int(jobid_s)
+        except Exception as e:
+            logger.error("Cannot parse sbatch jobid from:")
+            logger.error(bout)
+            logger.exception(e)
+            raise RuntimeError("sbatch command not returned task jobid")
+        print("Sbatch jobid: ", jobid)
+        logger.info(f"Sbatch jobid: {jobid}")
     else:
-        logger.error("Cannot parse sbatch jobid")
-        logger.error("### OUTPUT ###")
-        logger.error("bout")
+        logger.error("Cannot parse sbatch jobid from:")
+        logger.error(bout)
         raise RuntimeError("sbatch command not returned task jobid")
-    return int(num)
+    return jobid
 
 
 if __name__ == "__main__":

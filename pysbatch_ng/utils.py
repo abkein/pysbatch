@@ -11,14 +11,14 @@
 import itertools
 
 
-def __rngs(i):
+def ranges(i):
     for a, b in itertools.groupby(enumerate(i), lambda pair: pair[1] - pair[0]):
         b = list(b)
         yield b[0][1], b[-1][1]
 
 
-def ranges(i):
-    return list(__rngs(i))
+def ranges_as_list(i):
+    return list(ranges(i))
 
 
 if __name__ == "__main__":

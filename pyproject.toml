@@ -22,7 +22,9 @@ classifiers = [
 ]
 
 [project.scripts]
-
+spoll = "pysbatch_ng.spoll:main"
+spolld = "pysbatch_ng.polling:main"
+pysbatch = "pysbatch_ng.sbatch:main"
 
 [project.urls]
 "Homepage" = "https://github.com/Architect0rr/MDDPN"

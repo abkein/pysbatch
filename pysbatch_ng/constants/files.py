@@ -6,10 +6,9 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 08-09-2023 18:06:35
+# Last modified: 19-04-2024 19:49:11
 
-run: str = ""
-log: str = "log/slurm"
+lock: str = 'sbatch.lock'
 
 if __name__ == "__main__":
     pass

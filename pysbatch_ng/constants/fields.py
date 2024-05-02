@@ -22,5 +22,23 @@ nodes_use: str = 'nodes-use'
 folder: str = 'folder'
 execs: str = 'execs'
 
+spoll: str = 'spoll'
+spolld: str = 'spolld'
+sbatch: str = 'sbatch'
+sacct: str = 'sacct'
+sinfo: str = 'sinfo'
+cwd: str = 'cwd'
+jobid: str = 'jobid'
+ptag: str = 'tag'
+logfolder: str = 'logfolder'
+logto: str = 'logto'
+cmd: str = 'cmd'
+every: str = 'every'
+times_criteria: str = 'tc'
+debug: str = 'debug'
+conffile: str = 'file'
+confsection: str = 'section'
+preload: str = 'preload'
+
 if __name__ == "__main__":
     pass
