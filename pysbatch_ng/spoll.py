@@ -6,7 +6,7 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 01-05-2024 01:11:11
+# Last modified: 02-05-2024 23:40:20
 
 import os
 import sys
@@ -80,7 +80,6 @@ def run_conf(conf: Dict[str, Any], conffilename: Union[Path, str, None] = None, 
 def main():
     parser = argparse.ArgumentParser(prog="spoll", description="Run detached spoll instance. Program runs detached spolld instance and lazy forwards cli arguments to it.")  # , formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--debug", action="store_true", help="Debug. Default: False")
-    # parser.add_argument("--nofail", action="store_true", help="Attempts to not fail if fail occurs. Default: False")
     parser.add_argument("--genconf", action="store_true", help="Generate sample configuration file and exit (Default file: ./spoll_sample_conf.toml), see also --file and --section options")
     parser.add_argument("--checkconf", action="store_true", help="Check configuration file and exit, see also --file and --section options")
     parser.add_argument('--log', choices=['screen', 'file', 'both', 'off'], help="Whether to log to screen, to file or both or off logging. Default: file")
