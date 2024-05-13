@@ -39,7 +39,7 @@ def minilog(name: str) -> logging.Logger:
     return logger
 
 
-def run_conf(conf: Dict[str, Any], conffilename: Union[Path, str, None] = None, logger: logging.Logger = minilog("spoll")) -> bool:
+def run_conf(conf: Dict[str, Any], conffileloc: Union[Path, None] = None, logger: logging.Logger = minilog("spoll")) -> bool:
     """Run detached spoll instance with configuration provided by dict.
 
     Args:
@@ -54,13 +54,13 @@ def run_conf(conf: Dict[str, Any], conffilename: Union[Path, str, None] = None, 
     sconf = conf[cs.fields.spoll]
 
     conffile: Path
-    if conffilename: conffile = Path(conffilename).resolve()
-    else:
-        if cs.fields.jobid in sconf:
-            conffilename = f"{sconf[cs.fields.jobid]}_poll_conf.toml"
-            if cs.fields.ptag in sconf: conffilename = f"{sconf[cs.fields.ptag]}_" + conffilename
-            conffile = Path.cwd() / conffilename
-        else: RuntimeError("Jobid wasn't specified")
+    # if conffilename: conffile = Path(conffilename).resolve()
+    # else:
+    if cs.fields.jobid in sconf:
+        conffilename = f"{sconf[cs.fields.jobid]}_poll_conf.toml"
+        if cs.fields.ptag in sconf: conffilename = f"{sconf[cs.fields.ptag]}_" + conffilename
+        conffile = conffileloc / conffilename if conffileloc else Path.cwd() / conffilename
+    else: RuntimeError("Jobid wasn't specified")
 
     with conffile.open('w') as fp:
         toml.dump(conf, fp)

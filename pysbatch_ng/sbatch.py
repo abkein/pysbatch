@@ -42,7 +42,7 @@ def run(cwd: Path, logger: logging.Logger, conf: confdict, number: Union[int, No
 
     logger.debug('Configuring...')
     configure(conf, logger.getChild('configure'))
-    if number is not None:
+    if number:
         tdir = cwd / cs.folders.run / (cs.ps.jname + str(number))
     else:
         tdir = cwd / cs.folders.run / cs.ps.jname

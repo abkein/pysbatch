@@ -13,8 +13,10 @@ import os
 import sys
 import time
 import toml
+import shlex
 import logging
 import argparse
+import subprocess
 from enum import Enum
 from pathlib import Path
 from typing import Union, Dict, Any
@@ -287,21 +289,26 @@ def main() -> int:
         raise Exception(f"Lockfile exists: {lockfile.as_posix()}")
     lockfile.touch()
     logger.debug("Created lockfile")
+    logger.debug("Starting loop")
 
-    if loop(jobid, every * 60, logger, times_criteria):
+    fl = loop(jobid, every * 60, logger, times_criteria)
+    logger.debug("Loop end, deleting lock")
+    lockfile.unlink()
+
+    if fl:
+        logger.debug("Loop ok, checking fo cmd")
         if cmd:
             logger.info(f"Launching: {cmd}")
-            lout = wexec(cmd, logger.getChild("exec"))
+            cmds = shlex.split(cmd)
+            subprocess.Popen(cmds, start_new_session=True)
+            # lout = wexec(cmd, logger.getChild("exec"))
             logger.info("Succesfully launched command.")
-            logger.debug("Normal output:")
-            logger.debug(lout)
-        else:
-            logger.debug("No cmd was specified")
+            # logger.debug("Normal output:")
+            # logger.debug(lout)
+        else: logger.debug("No cmd was specified")
+    else: logger.debug("Loop not ok, not checking fo cmd")
 
-    lockfile.unlink()
-    logger.debug("Deleted lockfile")
     logger.info("Exiting.")
-
     return 0
 
 
