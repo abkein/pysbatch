@@ -8,15 +8,15 @@
 
 # Last modified: 02-05-2024 23:40:22
 
+import json
 import re
 import logging
 from pathlib import Path
 from typing import Dict, Union
 
-from MPMU import wexec, confdict
-
 from .config import configure
 from . import constants as cs
+from .utils import wexec, confdict
 
 
 def run(cwd: Path, logger: logging.Logger, conf: confdict, number: Union[int, None] = None, add_conf: Union[Dict, None] = None, return_dir: bool = False) -> int:
@@ -41,6 +41,8 @@ def run(cwd: Path, logger: logging.Logger, conf: confdict, number: Union[int, No
             conf[k] = v
 
     logger.debug('Configuring...')
+    logger.debug("Got configuration")
+    logger.debug(json.dumps(conf, indent=4))
     configure(conf, logger.getChild('configure'))
     if number:
         tdir = cwd / cs.folders.run / (cs.ps.jname + str(number))

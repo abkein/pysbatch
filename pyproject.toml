@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Scientific/Engineering :: Chemistry",
 ]
-dependencies = ['MPMU >= 0.0.2', 'toml']
+dependencies = ['toml']
 
 [project.scripts]
 spoll = "pysbatch_ng.spoll:main"

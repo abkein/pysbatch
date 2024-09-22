@@ -21,10 +21,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Union, Dict, Any
 
-from MPMU import wexec
 
-from . import constants as cs
 from . import config
+from .utils import wexec
+from . import constants as cs
 
 
 class SStates(str, Enum):
@@ -54,6 +54,7 @@ class SStates(str, Enum):
     TIMEOUT = "TIMEOUT"
     UNKNOWN_STATE = "UNKNOWN_STATE"
 
+
 all_states = [
     SStates.BOOT_FAIL,
     SStates.CANCELLED,
@@ -80,6 +81,7 @@ all_states = [
     SStates.SUSPENDED,
     SStates.TIMEOUT,
 ]
+
 
 states_str = [
     "BOOT_FAIL",
@@ -108,6 +110,7 @@ states_str = [
     "TIMEOUT",
 ]
 
+
 failure_states = [
     SStates.BOOT_FAIL,
     SStates.DEADLINE,
@@ -117,6 +120,8 @@ failure_states = [
     SStates.FAILED,
     SStates.CANCELLED,
 ]
+
+
 states_to_end = [
     SStates.COMPLETED,
     SStates.TIMEOUT,
@@ -141,7 +146,7 @@ def loop(jobid: int, every: int, logger: logging.Logger, times_criteria: int) ->
 
     try:
         while True:
-            time.sleep(every)  # here are seconds
+            time.sleep(every)
             logger.info("Checking job")
             try:
                 state = perform_check(jobid, logger.getChild("task_check"))
@@ -172,8 +177,7 @@ def loop(jobid: int, every: int, logger: logging.Logger, times_criteria: int) ->
                     if last_state_times > times_criteria:
                         logger.error(f"State {state} was too long (>{times_criteria} times). Exiting...")
                         return False
-                    else:
-                        logger.info(f"State {state} still for {times_criteria} times")
+                    else: logger.info(f"State {state} still for {times_criteria} times")
                 else:
                     last_state = state
                     last_state_times = 0
@@ -293,20 +297,20 @@ def main() -> int:
 
     fl = loop(jobid, every * 60, logger, times_criteria)
     logger.debug("Loop end, deleting lock")
-    lockfile.unlink()
 
     if fl:
         logger.debug("Loop ok, checking fo cmd")
-        if cmd:
-            logger.info(f"Launching: {cmd}")
-            cmds = shlex.split(cmd)
-            subprocess.Popen(cmds, start_new_session=True)
-            # lout = wexec(cmd, logger.getChild("exec"))
-            logger.info("Succesfully launched command.")
-            # logger.debug("Normal output:")
-            # logger.debug(lout)
-        else: logger.debug("No cmd was specified")
-    else: logger.debug("Loop not ok, not checking fo cmd")
+        if (cwd / "NORESTART").exists(): logger.info("NORESTART found, not launching cmd")
+        else:
+            if cmd:
+                logger.info(f"Launching: {cmd}")
+                cmds = shlex.split(cmd)
+                subprocess.Popen(cmds, start_new_session=True)
+                logger.info("Succesfully launched command.")
+            else: logger.debug("No cmd was specified")
+        lockfile.unlink()
+    else: logger.debug("Loop not ok, not checking for cmd")
+
 
     logger.info("Exiting.")
     return 0

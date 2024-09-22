@@ -13,9 +13,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Set, Any
 
-from MPMU import wexec, is_exe
-
-from .utils import ranges
+from .utils import ranges, wexec, is_exe
 from . import constants as cs
 
 
@@ -258,21 +256,29 @@ def cexecs(conf: Dict[str, Any], logger: logging.Logger) -> bool:
 
 
 def basic(conf: Dict[str, Any], logger: logging.Logger, is_check: bool = False):
+    logger.debug("Got conf")
+    logger.debug(json.dumps(conf, indent=4))
     if not cexecs(conf, logger.getChild("execs_configuration")):
         logger.error("Unable to find some executables")
         raise RuntimeError("Unable to find some executables")
     if cs.fields.folder in conf:
         cs.folders.run = conf[cs.fields.folder]
+        logger.debug(f"┌─Slurm folder: {cs.folders.run}")
     if cs.fields.jname in conf:
         cs.ps.jname = conf[cs.fields.jname]
+        logger.debug(f"├─Job name:     {cs.ps.jname}")
     if cs.fields.nnodes in conf:
         cs.ps.nnodes = conf[cs.fields.nnodes]
+        logger.debug(f"├─Nodes:        {cs.ps.nnodes}")
     if cs.fields.ntpn in conf:
         cs.ps.ntpn = conf[cs.fields.ntpn]
+        logger.debug(f"├─N tasks/node: {cs.ps.ntpn}")
     if cs.fields.partition in conf:
         cs.ps.partition = conf[cs.fields.partition]
+        logger.debug(f"├─Partition:    {cs.ps.partition}")
     if cs.fields.preload in conf:
         cs.ps.pre = conf[cs.fields.preload]
+        logger.debug(f"└─Preload:      {cs.ps.pre}")
     if not is_check:
         if cs.fields.executable in conf:
             if not is_exe(conf[cs.fields.executable], logger.getChild('is_exe')):

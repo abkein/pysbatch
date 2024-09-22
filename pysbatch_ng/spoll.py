@@ -77,7 +77,7 @@ def run_conf(conf: Dict[str, Any], conffileloc: Union[Path, None] = None, logger
     return True
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(prog="spoll", description="Run detached spoll instance. Program runs detached spolld instance and lazy forwards cli arguments to it.")  # , formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--debug", action="store_true", help="Debug. Default: False")
     parser.add_argument("--genconf", action="store_true", help="Generate sample configuration file and exit (Default file: ./spoll_sample_conf.toml), see also --file and --section options")
@@ -116,6 +116,7 @@ def main():
 
     logger = minilog("spoll")
 
+    conf: Dict[str, Union[str, int, Path, bool]]
     if args.checkconf:
         with Path(args.file).resolve().open('r', encoding='utf-8') as fp:
             conf = toml.load(fp)
@@ -137,7 +138,7 @@ def main():
         cmd = f"{cs.execs.spolld}"
         cmd += f" --file={shlex.quote(Path(args.file).resolve().as_posix())}"
     else:
-        conf: Dict[str, Union[str, int, Path, bool]] = {}
+        conf = {}
         if args.debug: conf[cs.fields.debug] = True
         if args.log: conf[cs.fields.logto] = args.log
         if args.jobid: conf[cs.fields.jobid] = args.jobid
