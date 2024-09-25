@@ -75,10 +75,13 @@ def parse_timelimit(limit_str: str) -> int:
 
 def get_timelimit(logger: logging.Logger, partition: str) -> int:
     cmd = f"{cs.execs.sinfo} -o '%P %l' --partition={partition}"
-    cmd += " | awk 'NR==2 {print $2}'"
+    # cmd += " | awk 'NR==2 {print $2}'"
     limit_str = wexec(cmd, logger.getChild('sinfo'))
+    s = limit_str.splitlines()[1]
+    s = s.split(' ')[1]
+
     try:
-        limit = parse_timelimit(limit_str)
+        limit = parse_timelimit(s)
         return limit
     except RuntimeError as e:
         logger.exception(e)
