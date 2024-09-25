@@ -40,7 +40,7 @@ def wexec(cmd: str, logger: logging.Logger) -> str:
         logger.error("Output from stderr:")
         logger.error(berr)
         raise RuntimeError("Process returned non-zero exitcode")
-    return bout
+    return bout.strip()
 
 
 def is_exe(fpath: str, logger: logging.Logger, exit: bool = False) -> bool:

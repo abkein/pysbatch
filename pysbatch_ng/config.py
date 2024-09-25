@@ -6,7 +6,7 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 01-05-2024 01:35:21
+# Last modified: 23-09-2024 03:21:49
 
 import json
 import logging
@@ -15,6 +15,7 @@ from typing import Dict, Set, Any
 
 from .utils import ranges, wexec, is_exe
 from . import constants as cs
+from . import info
 
 
 def spoll_check_conf(conf: Dict[str, Any], logger: logging.Logger) -> bool:
@@ -54,12 +55,11 @@ def spoll_check_conf(conf: Dict[str, Any], logger: logging.Logger) -> bool:
             fl = False
     if cs.fields.logfolder in sconf:
         try:
-            _logfolder = Path(sconf[cs.fields.logfolder]).resolve()
+            _logfolder = Path(sconf[cs.fields.logfolder]).resolve()  # created automatically if not exists
         except Exception as e:
             logger.error(f"Failed to parse '{cs.fields.logfolder}' field due to an exception:")
             logger.exception(e)
             fl = False
-        # if not _logfolder.exists(): print(f"Specified logfolder does not exists: {_logfolder.as_posix()}")  # unnecessary, cuz created automatically if not exists
     if cs.fields.logto in sconf:
         if not (sconf[cs.fields.logto] == 'file' or sconf[cs.fields.logto] == 'screen' or sconf[cs.fields.logto] == 'both' or sconf[cs.fields.logto] == 'off'):
             logger.error(f"Cannot parse '{cs.fields.logto}' field, must be one of 'screen', 'file', 'both' or 'off'")
@@ -84,30 +84,18 @@ def spoll_check_conf(conf: Dict[str, Any], logger: logging.Logger) -> bool:
     return fl
 
 
-def get_info(logger: logging.Logger):
+def get_info(logger: logging.Logger) -> None:
     logger.debug("Getting nodelist")
-    cmd = f"{cs.execs.sinfo} -h --hide -o %N"
-    nodelist_out = wexec(cmd, logger.getChild('sinfo'))
-    nodelist = {}
-    for nsl in nodelist_out.split(','):
-        nn, nr_s = nsl.strip().replace("]", "").split('[')
-        nra, nrb = nr_s.split('-')
-        nodelist[nn] = set(range(int(nra), int(nrb)+1))
-    cs.obj.nodelist = nodelist
+    cs.obj.nodelist = info.get_nodelist(logger)
     logger.info(f"Following nodes were found: {cs.obj.nodelist}")
 
     logger.debug("Getting partitions list")
-    cmd = f"{cs.execs.sinfo} -h --hide -o %P"
-    partitions_out = wexec(cmd, logger.getChild('sinfo'))
-    partitions = []
-    for el in partitions_out.split():
-        # if re.match(r"^[a-zA-Z_]+$", el):
-        partitions.append(el.replace("*", ""))
-    cs.obj.partitions = set(partitions)
+    cs.obj.partitions = info.get_partitions(logger)
     logger.info(f"Following partitions were found: {cs.obj.partitions}")
 
 
 def nodelist_parse(conf, logger: logging.Logger) -> Dict[str, Set[Any]]:
+    errmsg = "Cannot transform given nodelist to unique set"
     exclude = {}
     for node_name, node_num in conf.items():
         if isinstance(node_num, (list, set)):
@@ -123,13 +111,13 @@ def nodelist_parse(conf, logger: logging.Logger) -> Dict[str, Set[Any]]:
                         nra, nrb = node_num[1:-1].split('-')
                         nodelist = set(range(int(nra), int(nrb)+1))
                     except Exception:
-                        logger.critical("Cannot transform given nodelist to unique set")
+                        logger.critical(errmsg)
                         raise
                 except Exception:
-                    logger.critical("Cannot transform given nodelist to unique set")
+                    logger.critical(errmsg)
                     raise
             except Exception:
-                logger.critical("Cannot transform given nodelist to unique set")
+                logger.critical(errmsg)
                 raise
         exclude[node_name] = nodelist
 
