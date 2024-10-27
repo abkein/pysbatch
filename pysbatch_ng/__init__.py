@@ -8,7 +8,8 @@
 
 # Last modified: 20-04-2024 16:06:11
 
-from . import sbatch
+from .sbatch import Options, Platform, Sbatch
+from .utils import log
 from . import spoll
-from . import polling
+from .polling import Poller
 from . import utils

@@ -6,7 +6,7 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 02-05-2024 23:40:24
+# Last modified: 26-10-2024 09:32:44
 
 import re
 import sys
@@ -21,7 +21,7 @@ import toml
 from marshmallow import Schema, fields, post_load, validate
 
 from .execs import Execs, ExecsSchema, CMD, CMDSchema
-from .utils import logs, logger, wexec, FieldPath, loggerConf, logto_type
+from .utils import wexec, FieldPath, logto_type, log
 from .dumbdata import SStates, states_to_end, failure_states
 
 
@@ -60,9 +60,10 @@ class Poller:
     logfolder: Path
     __ok: bool = False
     __allow: bool = False
+    __current_state: SStates = SStates.PENDING
 
-    @logs
     def check(self, strict: bool) -> bool:
+        logger = log.get_logger()
         if not self.cwd.exists():
             logger.error("Current working directory does not exists")
             return False
@@ -124,7 +125,7 @@ class Poller:
             self.logfolder = self.cwd / logfolder
 
         logfile = self.logfolder / self.logfile_name
-        loggerConf(logto, logfile, self.debug)
+        log.configure(logto, logfile, True)
 
     @classmethod
     def from_schema(cls, data: dict[str, Any], immidiate_check: bool = False, strict: bool = False):
@@ -185,8 +186,8 @@ class Poller:
 
         return cls.from_schema(conf)
 
-    @logs
     def detach_start(self):
+        logger = log.get_logger()
         if not self.check(True):
             logger.error("Check not passed")
             return 2
@@ -212,6 +213,7 @@ class Poller:
 
     @classmethod
     def genconf(cls, write: bool = False, wfolder: Path | None = None):
+        logger = log.get_logger()
         p = Poller()
         schema = PollerSchema()
         d = schema.dump(p)
@@ -234,8 +236,8 @@ class Poller:
             logfile_name = f"{self.tag}_{logfile_name}"
         return logfile_name
 
-    @logs
     def __enter__(self):
+        logger = log.get_logger()
         if not self.check(True):
             raise RuntimeError("Invalud conf")
         if self.__lockfile.exists():
@@ -246,8 +248,8 @@ class Poller:
         self.__allow = True
         return self
 
-    @logs
     def __exit__(self, exc_type: Type[Exception], exc_value: Exception, exc_traceback) -> None:
+        logger = log.get_logger()
         self.__allow = False
         if not self.__ok:
             logger.debug("Loop was not ok, not deleting lock, not launching cmd")
@@ -255,7 +257,13 @@ class Poller:
 
         logger.debug("Loop ok, deleting lock")
         self.__lockfile.unlink(missing_ok=True)
-        logger.debug("Checking fo cmd")
+        if self.state in failure_states:
+            logger.warning("Job seems to be failed. Not launching cmd")
+            return
+        if self.state == SStates.COMPLETED:
+            logger.warning("Job seems to be completed. Not launching cmd")
+            return
+        logger.debug("Checking for cmd")
         if (self.cwd / "NORESTART").exists():
             logger.info("NORESTART found, not launching cmd")
         else:
@@ -267,30 +275,38 @@ class Poller:
             else:
                 logger.info("No cmd was specified")
 
-    @logs
-    def perform_check(self) -> SStates:
+
+    def perform_check(self) -> None:
         cmd = f"{self.execs.sacct} -j {self.jobid} -n -p -o jobid,state"
         bout = wexec(cmd)
         for line in bout.splitlines():
-            if re.match(r"^\d+\|[a-zA-Z]+\|", line):
-                return SStates(line.split("|")[1])
-        return SStates.UNKNOWN_STATE
+            if re.match(r"^\d+\|[a-zA-Z]+\|$", line):
+                self.state = SStates(line.split("|")[1])
+                return
+        self.state = SStates.UNKNOWN_STATE
 
     def ok(self) -> None:
         self.__ok = True
 
-    @logs
     def start_loop(self):
+        logger = log.get_logger()
         if self.__allow:
             return self.__loop()
         else:
             logger.error("Did you entered context?")
             return False
 
-    @logs
+    @property
+    def state(self):
+        return self.__current_state
+
+    @state.setter
+    def state(self, state: SStates):
+        self.__current_state = state
+
     def __loop(self) -> bool:
-        state = SStates.PENDING
-        last_state = SStates.PENDING
+        logger = log.get_logger()
+        last_state = self.state
         last_state_times: int = 0
 
         logger.info("Started main loop")
@@ -300,43 +316,43 @@ class Poller:
                 time.sleep(self.every)
                 logger.info("Checking job")
                 try:
-                    state = self.perform_check()
+                    self.perform_check()
                 except Exception as e:
                     logger.critical("Check failed due to exception:")
                     logger.exception(e)
                     raise
-                logger.info(f"Job state: {str(state)}")
+                logger.info(f"Job state: {str(self.state)}")
 
-                if state in states_to_end:
-                    logger.info(f"Reached end state: {str(state)}. Exiting loop")
+                if self.state in states_to_end:
+                    logger.info(f"Reached end state: {str(self.state)}. Exiting loop")
                     self.ok()
                     return True
-                elif state in failure_states:
-                    logger.error(f"Something went wrong with slurm job. State: {str(state)} Exiting...")
+                elif self.state in failure_states:
+                    logger.error(f"Something went wrong with slurm job. State: {str(self.state)} Exiting...")
                     self.ok()
                     return False
-                elif state == SStates.UNKNOWN_STATE:
-                    logger.error(f"Unknown slurm job state: {str(state)} Exiting...")
-                    self.ok()
-                    return False
-                elif state == SStates.PENDING:
+                # elif self.state == SStates.UNKNOWN_STATE:
+                #     logger.error(f"Unknown slurm job state. Exiting...")
+                #     self.ok()
+                #     return False
+                elif self.state == SStates.PENDING:
                     logger.info("Pending...")
-                elif state == SStates.RUNNING:
-                    last_state = state
+                elif self.state == SStates.RUNNING:
+                    last_state = self.state
                     last_state_times = 0
                     logger.info("RUNNING")
                 else:  # state != SStates.RUNNING:
-                    if state == last_state:
+                    if self.state == last_state:
                         last_state_times += 1
                         if last_state_times > self.times_criteria:
-                            logger.error(f"State {state} was too long (>{self.times_criteria} times). Exiting...")
+                            logger.error(f"State {self.state} was too long (>{self.times_criteria} times). Exiting...")
                             self.ok()
                             return False
-                        else: logger.info(f"State {state} still for {self.times_criteria} times")
+                        else: logger.info(f"State {self.state} still for {self.times_criteria} times")
                     else:
-                        last_state = state
+                        last_state = self.state
                         last_state_times = 0
-                        logger.warning(f"Strange state {state} encountered")
+                        logger.warning(f"Strange state {self.state} encountered")
 
         except Exception as e:
             logger.critical("Uncaught exception")
@@ -351,6 +367,7 @@ def main() -> int:
     with poller:
         poller.start_loop()
 
+    logger = log.get_logger()
     logger.info("Exiting.")
     return 0
 

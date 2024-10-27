@@ -6,7 +6,7 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 02-05-2024 23:40:24
+# Last modified: 26-10-2024 09:32:44
 
 import os
 import re
@@ -16,7 +16,6 @@ import shutil
 import inspect
 import logging
 import itertools
-import functools
 import subprocess
 from pathlib import Path
 from typing import Union, Literal
@@ -40,35 +39,73 @@ def minilog(name: str) -> logging.Logger:
     return logger
 
 
-logger: logging.Logger = minilog(__name__)
+def get_call_stack(fname: str | None = None, skip: int = 0, skip_after: int = 0):
+    stack = inspect.stack()
+    func_list = [frame.function for frame in stack[1+skip:-1-skip_after]]
+    s = ".".join(reversed(func_list))
+    if fname is not None:
+        s += f".{fname}"
+    return s
+
+
+class UpperLevelFilter(logging.Filter):
+    def __init__(self, max_level: int):
+        super().__init__()
+        self.max_level = max_level
+
+    def filter(self, record):
+        return record.levelno <= self.max_level
+
+
 logto_type = Union[Literal['file'], Literal['screen'], Literal['both'], Literal['off']]
 
 
-def loggerConf(logto: logto_type, logfile: Path, debug: bool = True):
-    global logger
-    logger = logging.root.getChild(__name__)
-    logger.handlers.clear()
-    loglevel: int = logging.DEBUG if debug else logging.INFO
-    logger.setLevel(loglevel)
+class LogDaemon:
+    __logger: logging.Logger
+    __initalized: bool = False
 
-    formatter: logging.Formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s')
+    def __init__(self) -> None:
+        self.__logger = logging.getLogger("pysbatch")
 
-    if logto == 'file' or logto == 'both':
-        FileHandler = logging.FileHandler(logfile)
-        FileHandler.setFormatter(formatter)
-        FileHandler.setLevel(logging.DEBUG)
-        logger.addHandler(FileHandler)
-    if logto == 'screen' or logto == 'both':
-        soutHandler = logging.StreamHandler(stream=sys.stdout)
-        soutHandler.setLevel(logging.DEBUG)
-        soutHandler.setFormatter(formatter)
-        logger.addHandler(soutHandler)
-        serrHandler = logging.StreamHandler(stream=sys.stderr)
-        serrHandler.setFormatter(formatter)
-        serrHandler.setLevel(logging.WARNING)
-        logger.addHandler(serrHandler)
+    def configure(self, logto: logto_type, logfile: Path | None = None, debug: bool = True):
+        if self.__initalized:
+            return
+        self.__logger.handlers.clear()
+        loglevel: int = logging.DEBUG if debug else logging.INFO
+        self.__logger.setLevel(loglevel)
 
-    if logto == 'off': logger.propagate = False
+        formatter: logging.Formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s')
+
+        if logto == 'file' or logto == 'both':
+            if logfile is None:
+                raise ValueError("Logfile is not specified")
+            FileHandler = logging.FileHandler(logfile)
+            FileHandler.setFormatter(formatter)
+            FileHandler.setLevel(logging.DEBUG)
+            self.__logger.addHandler(FileHandler)
+        if logto == 'screen' or logto == 'both':
+            soutHandler = logging.StreamHandler(stream=sys.stdout)
+            soutHandler.setLevel(logging.DEBUG)
+            soutHandler.setFormatter(formatter)
+            soutHandler.addFilter(UpperLevelFilter(logging.WARNING))
+            self.__logger.addHandler(soutHandler)
+            serrHandler = logging.StreamHandler(stream=sys.stderr)
+            serrHandler.setFormatter(formatter)
+            serrHandler.setLevel(logging.WARNING)
+            self.__logger.addHandler(serrHandler)
+
+        if logto == 'off':
+            self.__logger.propagate = False
+        self.__initalized = True
+        self.__logger.info(f"Initialized by {get_call_stack(skip=1, skip_after=1)}")
+
+    def get_logger(self):
+        if not self.__initalized:
+            raise RuntimeError("pysbatch logger is not configured. Do it by calling pysbatch.log.configure()")
+        return self.__logger.getChild(get_call_stack(skip=1, skip_after=1))
+
+
+log = LogDaemon()
 
 
 class FieldPath(fields.Field):
@@ -90,16 +127,17 @@ def ranges_as_list(i):
 
 
 def parse_timelimit(limit_str: str) -> int:
+    logger = log.get_logger()
     if limit_str == "UNLIMITED":
         return -1
     else:
-        pattern = r"^(?:(\d+)-)?(\d{1,2}):(\d{2}):(\d{2})$"
+        pattern = r"^[a-zA-Z\*]*\s+(?:(\d+)-)?(\d{1,2}):(\d{2}):?(?:(\d{2}))?$"
         match = re.match(pattern, limit_str)
         if match:
             days = int(match.group(1)) if match.group(1) else 0
-            hours = int(match.group(2))
-            minutes = int(match.group(3))
-            seconds = int(match.group(4))
+            hours = int(match.group(2)) if match.group(2) else 0
+            minutes = int(match.group(3)) if match.group(3) else 0
+            seconds = int(match.group(4)) if match.group(4) else 0
 
             if 0 <= hours <= 23 and 0 <= minutes <= 59 and 0 <= seconds <= 59:
                 return ((days * 24 + hours) * 60 + minutes) * 60 + seconds
@@ -129,33 +167,11 @@ def parse_nodes(nodelist_str: str) -> dict[str, set[int]]:
     return nodelist
 
 
-def get_call_stack(fname: str | None = None):
-    stack = inspect.stack()
-    func_list = [frame.function for frame in stack[1:] if frame.function != "wrapper"]
-    s = ".".join(reversed(func_list))
-    if fname is not None:
-        s += f".{fname}"
-    return s
-
-
-def logs(func):
-    global logger
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        global logger
-        logger = logging.root.getChild(__name__).getChild(get_call_stack(func.__name__))
-        # logger = minilog(get_call_stack())
-        result = func(*args, **kwargs)
-        # print(f"After calling {func.__name__}")
-        return result
-    return wrapper
-
-
-@logs
 def wexec(cmd: str) -> str:
+    logger = log.get_logger()
     logger.debug(f"Calling '{cmd}'")
     cmds = shlex.split(cmd)
-    proc = subprocess.run(cmds, capture_output=True)
+    proc = subprocess.run(cmds, capture_output=True, env=os.environ.copy())
     bout = proc.stdout.decode()
     berr = proc.stderr.decode()
     if proc.returncode != 0:

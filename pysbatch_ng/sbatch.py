@@ -6,7 +6,7 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 21-10-2024 04:37:26
+# Last modified: 26-10-2024 09:32:44
 
 import re
 import sys
@@ -16,9 +16,9 @@ from pathlib import Path
 from dataclasses import dataclass
 
 import toml
-from marshmallow import Schema, fields, missing, post_load, validates, ValidationError
+from marshmallow import Schema, fields, post_load, validates, ValidationError
 
-from .utils import ranges, wexec, logger, is_exe, logs, parse_nodes, parse_timelimit, FieldPath
+from .utils import ranges, wexec, parse_nodes, parse_timelimit, FieldPath, log
 from .execs import CMDSchema, Execs, ExecsSchema, CMD
 from .polling import Poller
 
@@ -37,8 +37,8 @@ class Options:
     job_number: int | None = None
     tag: int | None = None
 
-    @logs
     def check(self, strict: bool) -> bool:
+        logger = log.get_logger()
         logger.debug(f"┌─Slurm folder: {self.folder}")
         logger.debug(f"├─Job name:     {self.job_name}")
         logger.debug(f"├─Nodes:        {self.nnodes}")
@@ -120,9 +120,11 @@ class Platform:
         self.usr_nodes_exclude = nodes_exclude
         self.usr_nodes_include = nodes_include
 
-    @logs
     def update(self, strict: bool) -> bool:
-        self.execs.check(strict)
+        logger = log.get_logger()
+        if not self.execs.check(strict):
+            logger.error("Could not find some executables")
+            return False
 
         logger.debug("Getting nodelist")
         self.nodelist = self.get_nodelist()
@@ -188,14 +190,12 @@ class Platform:
 
         return True
 
-    @logs
     def get_nodelist(self) -> dict[str, set[int]]:
         cmd = f"{self.execs.sinfo} -h --hide -o %N"
         nodelist_out = wexec(cmd)
 
         return parse_nodes(nodelist_out)
 
-    @logs
     def get_partitions(self) -> set[str]:
         cmd = f"{self.execs.sinfo} -h --hide -o %P"
         partitions_out = wexec(cmd)
@@ -205,18 +205,18 @@ class Platform:
 
         return set(partitions)
 
-    @logs
     def get_timelimit(self, partition: str) -> int:
         cmd = f"{self.execs.sinfo} -o '%P %l' --partition={partition}"
         limit_str = wexec(cmd)
 
         try:
             s = limit_str.splitlines()[1]
-            s = s.split(' ')[1]
             limit = parse_timelimit(s)
             return limit
-        except Exception:
+        except Exception as e:
+            logger = log.get_logger()
             logger.error("Unable to get timelimit")
+            logger.exception(e)
         return 0
 
     @property
@@ -317,19 +317,19 @@ class Sbatch:
         self.platform = platform
         self.cwd = cwd
 
-    @logs
     def check(self, strict: bool) -> bool:
+        logger = log.get_logger()
         if not self.options.check(strict):
             logger.error("Some options are invalid")
             return False
 
         if not self.platform.update(strict):
             logger.error("There was some misconfiguration")
+            return False
 
         logger.info("Configuration OK")
         return True
 
-    @logs
     def run(self, run_poll: bool = False, poller: Poller | None = None, poll_cmd: CMD | None = None) -> int:
         """Runs sbatch command via creating .job file
 
@@ -346,13 +346,16 @@ class Sbatch:
         Returns:
             jobid (int): slurm's jobid
         """
-        logger.debug('Configuring...')
-        self.check(True)
+        if not self.check(True):
+            raise RuntimeError("Configuration check failed")
 
         tdir = self.options.job_folder(self.cwd)
         tdir.mkdir(parents=True, exist_ok=True)
 
         job_file = tdir / f"{self.options.job_name}.job"
+        log.configure('both', tdir / "sbatch_launch.log")
+        logger = log.get_logger()
+        logger.debug('Configuring...')
 
         if run_poll:
             if poller is None:
@@ -385,7 +388,10 @@ class Sbatch:
             if len(self.platform.nodes_exclude) != 0:
                 fh.writelines(f"#SBATCH --exclude={self.platform.exclude_str}\n")
             assert self.options.cmd is not None
-            fh.writelines(f"{self.options.cmd.preload} srun -u {self.options.cmd.executable} {self.options.cmd.args}")
+            if self.options.cmd.preload == "":
+                fh.writelines(f"srun -u {self.options.cmd.executable} {self.options.cmd.args}")
+            else:
+                fh.writelines(f"{self.options.cmd.preload} srun -u {self.options.cmd.executable} {self.options.cmd.args}")
 
         logger.info("Submitting task...")
         cmd = f"{self.platform.execs.sbatch} {job_file}"
@@ -441,6 +447,7 @@ def_conf_name: str = "sbatch.toml"
 
 
 def main():
+    log.configure('screen')
     parser = argparse.ArgumentParser(prog="sbatch", description="Only configuration checks and dumps via CLI currently")
     parser.add_argument("--cwd", action="store", type=str)
     parser.add_argument("-c", "--conf", action="store", type=str)

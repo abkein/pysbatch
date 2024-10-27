@@ -6,7 +6,7 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 21-10-2024 04:36:50
+# Last modified: 26-10-2024 09:32:44
 
 from typing import Any
 from pathlib import Path
@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from marshmallow import Schema, fields, post_load
 
-from .utils import is_exe, logs, logger
+from .utils import is_exe, log
 
 
 class StrPath(fields.Field):
@@ -37,8 +37,8 @@ class Execs:
     spoll:  str = "spoll"
     spolld: str = "spolld"
 
-    @logs
     def check(self, strict: bool) -> bool:
+        logger = log.get_logger()
         for exec in [self.sinfo, self.sbatch, self.sacct, self.spoll, self.spolld]:
             if not is_exe(exec):
                 logger.error(f"Executable {exec} not found")
@@ -74,8 +74,8 @@ class CMD:
     executable: str | None = None
     args: str = ""
 
-    @logs
     def check(self) -> bool:
+        logger = log.get_logger()
         if self.executable is None:
             logger.error(f"Executable is not specified")
             return False

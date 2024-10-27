@@ -6,18 +6,17 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 02-05-2024 23:40:24
+# Last modified: 26-10-2024 09:32:44
 
 import sys
 import argparse
 
 from .polling import Poller
-from .utils import logs, logger
+from .utils import log
 
 
-@logs
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="spolld")
+    parser = argparse.ArgumentParser(prog="spoll")
     Poller.set_args(parser)
 
     # parser.add_argument("--tmpfile", action="store", type=str, help="If conffile wasn't specified, spoll creates its own conffile and forwards arguments from cmd to it. This option allows specify this conffile location. Default: [tag_]jobid_poll_conf.toml")
@@ -27,6 +26,7 @@ def main() -> int:
 
     poller = Poller.from_args(args)
 
+    logger = log.get_logger()
     if args.checkconf:
         if not poller.check(False):
             logger.error("Configuration check wasn't successfull")
