@@ -8,6 +8,7 @@
 
 # Last modified: 26-10-2024 09:32:44
 
+import os
 import re
 import sys
 import time
@@ -15,7 +16,7 @@ import shlex
 import argparse
 import subprocess
 from pathlib import Path
-from typing import Any, Type, Literal
+from typing import Any, Type
 
 import toml
 from marshmallow import Schema, fields, post_load, validate
@@ -357,6 +358,18 @@ class Poller:
     def state(self, state: SStates):
         self.__current_state = state
 
+    def inform_user(self, message: str):
+        try:
+            user = os.environ['user']
+            bout, berr = wexec('who')
+            ttys = [line.split()[1] for line in bout.splitlines() if line.startswith(user)]
+            ttys = [f"/dev/{tty}" for tty in ttys]
+            for tty in ttys:
+                with open(tty, 'w') as term:
+                    term.write(f"\n{message}\n")
+        except Exception as e:
+            pass
+
     def __loop(self) -> bool:
         logger = log.get_logger()
         last_state = self.state
@@ -373,16 +386,19 @@ class Poller:
                 except Exception as e:
                     logger.critical("Check failed due to exception:")
                     logger.exception(e)
+                    self.inform_user(f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) check failed due to exception, cwd: {self.cwd.as_posix()}")
                     raise
                 logger.info(f"Job state: {str(self.state)}")
 
                 if self.state in states_to_end:
                     logger.info(f"Reached end state: {str(self.state)}. Exiting loop")
                     self.ok()
+                    self.inform_user(f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) reached end state, cwd: {self.cwd.as_posix()}")
                     return True
                 elif self.state in failure_states:
                     logger.error(f"Something went wrong with slurm job. State: {str(self.state)} Exiting...")
                     self.ok()
+                    self.inform_user(f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) Something went wrong with slurm job. State: {str(self.state)}. cwd: {self.cwd.as_posix()}")
                     return False
                 # elif self.state == SStates.UNKNOWN_STATE:
                 #     logger.error(f"Unknown slurm job state. Exiting...")
@@ -399,6 +415,7 @@ class Poller:
                         last_state_times += 1
                         if last_state_times > self.times_criteria:
                             logger.error(f"State {self.state} was too long (>{self.times_criteria} times). Exiting...")
+                            self.inform_user(f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) State {self.state} was too long, cwd: {self.cwd.as_posix()}")
                             self.ok()
                             return False
                         else: logger.info(f"State {self.state} still for {self.times_criteria} times")
