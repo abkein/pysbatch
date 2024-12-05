@@ -192,25 +192,25 @@ class Platform:
 
     def get_nodelist(self) -> dict[str, set[int]]:
         cmd = f"{self.execs.sinfo} -h --hide -o %N"
-        nodelist_out = wexec(cmd)
+        bout, berr = wexec(cmd)
 
-        return parse_nodes(nodelist_out)
+        return parse_nodes(bout)
 
     def get_partitions(self) -> set[str]:
         cmd = f"{self.execs.sinfo} -h --hide -o %P"
-        partitions_out = wexec(cmd)
+        bout, berr = wexec(cmd)
         partitions = []
-        for el in partitions_out.split():
+        for el in bout.split():
             partitions.append(el.replace("*", ""))
 
         return set(partitions)
 
     def get_timelimit(self, partition: str) -> int:
         cmd = f"{self.execs.sinfo} -o '%P %l' --partition={partition}"
-        limit_str = wexec(cmd)
+        bout, berr = wexec(cmd)
 
         try:
-            s = limit_str.splitlines()[1]
+            s = bout.splitlines()[1]
             limit = parse_timelimit(s)
             return limit
         except Exception as e:
@@ -395,7 +395,7 @@ class Sbatch:
 
         logger.info("Submitting task...")
         cmd = f"{self.platform.execs.sbatch} {job_file}"
-        bout = wexec(cmd)
+        bout, berr = wexec(cmd)
 
         if re.match(r'Submitted batch job \d+', bout):
             try:

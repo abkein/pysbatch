@@ -57,7 +57,8 @@ class UpperLevelFilter(logging.Filter):
         return record.levelno <= self.max_level
 
 
-logto_type = Union[Literal['file'], Literal['screen'], Literal['both'], Literal['off']]
+log2type = Literal["file", "screen", "both", "off"]
+log2list: list[log2type] = ["file", "screen", "both", "off"]
 
 
 class LogDaemon:
@@ -67,7 +68,7 @@ class LogDaemon:
     def __init__(self) -> None:
         self.__logger = logging.getLogger("pysbatch")
 
-    def configure(self, logto: logto_type, logfile: Path | None = None, debug: bool = True):
+    def configure(self, logto: log2type, logfile: Path | None = None, debug: bool = True):
         if self.__initalized:
             return
         self.__logger.handlers.clear()
@@ -167,21 +168,20 @@ def parse_nodes(nodelist_str: str) -> dict[str, set[int]]:
     return nodelist
 
 
-def wexec(cmd: str) -> str:
+def wexec(cmd: str) -> tuple[str, str]:
     logger = log.get_logger()
     logger.debug(f"Calling '{cmd}'")
     cmds = shlex.split(cmd)
-    proc = subprocess.run(cmds, capture_output=True, env=os.environ.copy())
-    bout = proc.stdout.decode()
-    berr = proc.stderr.decode()
-    if proc.returncode != 0:
+    try:
+        proc = subprocess.run(cmds, capture_output=True, check=True, env=os.environ.copy())
+    except subprocess.CalledProcessError as e:
         logger.error("Process returned non-zero exitcode")
         logger.error("Output from stdout:")
-        logger.error(bout)
+        logger.error(e.stdout)
         logger.error("Output from stderr:")
-        logger.error(berr)
-        raise RuntimeError("Process returned non-zero exitcode")
-    return bout.strip()
+        logger.error(e.stderr)
+        raise
+    return proc.stdout.decode().strip(), proc.stderr.decode().strip()
 
 
 def is_exe(fpath: str | Path) -> bool:

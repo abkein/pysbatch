@@ -15,21 +15,21 @@ import shlex
 import argparse
 import subprocess
 from pathlib import Path
-from typing import Any, Type
+from typing import Any, Type, Literal
 
 import toml
 from marshmallow import Schema, fields, post_load, validate
 
 from .execs import Execs, ExecsSchema, CMD, CMDSchema
-from .utils import wexec, FieldPath, logto_type, log
-from .dumbdata import SStates, states_to_end, failure_states
+from .utils import wexec, FieldPath, log2type, log2list, log
+from .dumbdata import SStates, states_to_end, failure_states, SlurmJobInfo
 
 
 class PollerSchema(Schema):
     execs = fields.Nested(ExecsSchema, missing=Execs())
     jobid = fields.Integer(allow_none=True, missing=None)
     debug = fields.Boolean(default=True, missing=True)
-    logto = fields.String(default="both", missing='both', validate=validate.OneOf(["file", "screen", "both", "off"]))
+    logto = fields.String(default='file', missing='file', validate=validate.OneOf(log2list))
 
     tag = fields.Integer(allow_none=True, missing=None)
     every = fields.Integer(missing=5)
@@ -45,7 +45,6 @@ class PollerSchema(Schema):
     def make_spoll(self, data, **kwargs):
         return Poller(**data)
 
-
 class Poller:
     execs: Execs = Execs()
     debug: bool = True
@@ -55,12 +54,14 @@ class Poller:
     times_criteria: int = 288
     cmd: CMD | None = None
     cwd: Path
+    logto: log2type
 
     __lockfile: Path
     logfolder: Path
     __ok: bool = False
     __allow: bool = False
     __current_state: SStates = SStates.PENDING
+    __job: SlurmJobInfo
 
     def check(self, strict: bool) -> bool:
         logger = log.get_logger()
@@ -94,7 +95,7 @@ class Poller:
         jobid: int | None = None,
         cmd: CMD | None = None,
         debug: bool = True,
-        logto: logto_type = 'file',
+        logto: log2type = 'file',
         tag: int | None = None,
         every: int = 5,
         times_criteria: int = 288,
@@ -228,7 +229,6 @@ class Poller:
             logger.info(f"Sample confguration was written to {wfile.as_posix()}")
         return p
 
-
     @property
     def logfile_name(self) -> str:
         logfile_name = f"{self.jobid}_poll.log"
@@ -275,10 +275,63 @@ class Poller:
             else:
                 logger.info("No cmd was specified")
 
+    def parse_sacct_output(self, output: str) -> list[SlurmJobInfo]:
+        job_infos = []
+        lines = output.strip().split('\n')
+        for line in lines:
+            parts = line.split()
+
+            if len(parts) >= 8:
+                job_id = parts[0]
+                job_name = parts[1]
+                partition = parts[2]
+                user = parts[3]
+                account = parts[4]
+
+                try:
+                    n_nodes = int(parts[5])
+                    state_str = ' '.join(parts[6:-1]).split(" ")[0]
+                except ValueError:
+                    n_nodes = 0
+                    state_str = ' '.join(parts[5:-1])
+
+                state_enum = SStates.from_string(state_str)
+
+                # Split the ExitCode into exit code and signal
+                exit_code_str = parts[-1]
+                exit_code, signal = map(int, exit_code_str.split(':'))
+
+                job_info = SlurmJobInfo(
+                    job_id=job_id,
+                    job_name=job_name,
+                    partition=partition,
+                    user=user,
+                    account=account,
+                    n_nodes=n_nodes,
+                    state=state_enum,
+                    exit_code=exit_code,
+                    signal=signal
+                )
+                job_infos.append(job_info)
+        return job_infos
+
+    def get_slurm_job_info(self, job_id: int) -> SlurmJobInfo:
+        assert job_id > 0
+        logger = log.get_logger()
+        try:
+            cmd =  f"sacct --format=JobID%-15,JobName%-20,Partition%-15,User%-20,Account%-20,NNodes%-10,State%-30,ExitCode%-15 --jobs={job_id} --noheader"
+            bout, berr = wexec(cmd)
+            job_infos = self.parse_sacct_output(bout)
+            return job_infos[0]
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"An error occurred while retrieving job info: {e}")
+            logger.exception(e)
+            raise
 
     def perform_check(self) -> None:
         cmd = f"{self.execs.sacct} -j {self.jobid} -n -p -o jobid,state"
-        bout = wexec(cmd)
+        bout, berr = wexec(cmd)
         for line in bout.splitlines():
             if re.match(r"^\d+\|[a-zA-Z]+\|$", line):
                 self.state = SStates(line.split("|")[1])

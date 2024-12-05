@@ -101,4 +101,3 @@ class CMDSchema(Schema):
 
 if __name__ == "__main__":
     pass
-
