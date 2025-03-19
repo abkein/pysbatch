@@ -8,8 +8,8 @@
 
 # Last modified: 20-04-2024 16:06:11
 
+from .utils import configure_logger
 from .sbatch import Options, Platform, Sbatch
-from .utils import log
-from . import spoll
 from .polling import Poller
+from .execs import Execs
 from . import utils

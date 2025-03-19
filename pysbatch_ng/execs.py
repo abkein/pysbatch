@@ -8,13 +8,14 @@
 
 # Last modified: 26-10-2024 09:32:44
 
+import inspect
 from typing import Any
 from pathlib import Path
 from dataclasses import dataclass
 
 from marshmallow import Schema, fields, post_load
 
-from .utils import is_exe, log
+from .utils import is_exe, logger  # , ConfigurationError
 
 
 class StrPath(fields.Field):
@@ -31,29 +32,35 @@ class StrPath(fields.Field):
 
 @dataclass
 class Execs:
-    sinfo:  str = "sinfo"
-    sbatch: str = "sbatch"
-    sacct:  str = "sacct"
-    spoll:  str = "spoll"
-    spolld: str = "spolld"
+    sinfo:    str = "sinfo"
+    sbatch:   str = "sbatch"
+    sacct:    str = "sacct"
+    spoll:    str = "spoll"
+    spolld:   str = "spolld"
+    squeue:   str = "squeue"
+    scontrol: str = "scontrol"
 
-    def check(self, strict: bool) -> bool:
-        logger = log.get_logger()
-        for exec in [self.sinfo, self.sbatch, self.sacct, self.spoll, self.spolld]:
+    # def __post_init__(self):
+    #     if not self.check():
+    #         raise ConfigurationError()
+
+    def check(self) -> bool:
+        for exec in [self.sinfo, self.sbatch, self.sacct, self.spoll, self.spolld, self.squeue, self.scontrol]:
             if not is_exe(exec):
                 logger.error(f"Executable {exec} not found")
                 return False
         return True
 
     @classmethod
-    def from_schema(cls, data: dict[str, Any], immidiate_check: bool = False, strict: bool = False):
-        schema = ExecsSchema()
-        execs = schema.load(data)
-        if not isinstance(execs, Execs):
-            raise ValueError("")
-        if immidiate_check:
-            if not execs.check(strict):
-                raise RuntimeError("")
+    def from_schema(cls, data: dict[str, Any]) -> "Execs":
+        execs = ExecsSchema().load(data)
+        if not isinstance(execs, Execs): raise ValueError(f"Unable to load {cls.__name__} from data (dev bug:{__file__}:{inspect.currentframe().f_code.co_name})")  # type: ignore
+        return execs
+
+    def dump_schema(self) -> dict[str, Any]:
+        data = ExecsSchema().dump(self)
+        if not isinstance(data, dict): raise ValueError(f"Unable to dump {self.__class__.__name__} to data (dev bug:{__file__}:{inspect.currentframe().f_code.co_name})")  # type: ignore
+        return data
 
 
 class ExecsSchema(Schema):
@@ -62,42 +69,11 @@ class ExecsSchema(Schema):
     sacct  = fields.String(missing="sacct")
     spoll  = fields.String(missing="spoll")
     spolld = fields.String(missing="spolld")
+    squeue = fields.String(missing="squeue")
+    scontrol = fields.String(missing="scontrol")
 
     @post_load
-    def create_execs(self, data, **kwargs) -> Execs:
-        return Execs(**data)
-
-
-@dataclass
-class CMD:
-    preload: str = ""
-    executable: str | None = None
-    args: str = ""
-
-    def check(self) -> bool:
-        logger = log.get_logger()
-        if self.executable is None:
-            logger.error(f"Executable is not specified")
-            return False
-        if not is_exe(self.executable):
-            logger.error(f"Executable {self.executable} not found")
-            return False
-
-        return True
-
-    def gen_line(self):
-        return f"{self.preload} {self.executable} {self.args}"
-
-
-class CMDSchema(Schema):
-    preload = fields.String(missing="")
-    executable = fields.String(allow_none=True, missing=None)
-    args = fields.String(missing="")
-
-    @post_load
-    def create_cmd(self, data, **kwargs) -> CMD:
-        return CMD(**data)
-
+    def make_execs_conf(self, data, **kwargs) -> Execs: return Execs(**data)
 
 if __name__ == "__main__":
     pass

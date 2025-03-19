@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pysbatch-ng"
-version = "0.0.2"
+version = "0.0.4"
 authors = [{ name = "Egor Perevoshchikov", email = "abkein@abkein.ru" }]
 description = "A package for continiously running LAMMPS on HPC systems with SLURM workload manager, where execution time is limited"
 readme = "README.md"
@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Scientific/Engineering :: Chemistry",
 ]
-dependencies = ['toml', 'marshmallow']
+dependencies = ['toml', 'marshmallow', 'paramiko']
 
 [project.scripts]
 spoll = "pysbatch_ng.spoll:main"
