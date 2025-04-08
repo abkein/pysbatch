@@ -137,7 +137,7 @@ class NodeDict(dict):
 
     @classmethod
     def parse_str(cls, nodelist_str: str) -> 'NodeDict':
-        if not re.match(r"^\s*?([a-z]+(?:\[[\d\-\,\s]*\]|\d+)(?:\,\s*?)?)*\s*?$", nodelist_str): raise RuntimeError(f"Invalid nodelist: {nodelist_str}")
+        if not re.match(r"^\s*?([a-z]+(?:\[[\d\-\,\s]*\]|\d+)(?:\,\s*?)?)*\s*$", nodelist_str): raise RuntimeError(f"Invalid nodelist: {nodelist_str}")
         nodedict: dict[str, set[int]] = {}
         groupspecs: list[tuple[str, str]] = re.findall(r"([a-z]+)(\[(?:(?:\d+|\d+\-\d+)(?:\,\s*?)?)*\]|\d+)", nodelist_str.replace(" ", ""))
         for hostname, numspec in groupspecs:

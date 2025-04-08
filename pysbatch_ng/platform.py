@@ -90,7 +90,7 @@ class Platform:
             return False
 
         if was_empty:
-            logger.info(f"Include nodelist is empty, asumming use all, except exlude nodelist")
+            logger.info("Include nodelist is empty, asumming use all, except exlude nodelist")
             long_usr_nodes_include = long_nodelist
             long_usr_nodes_include.difference_update(long_usr_nodes_exclude)
 
@@ -115,11 +115,11 @@ class Platform:
         return True
 
     def get_nodelist(self) -> NodeDict:
-        bout, berr = shell.exec([f"{self.execs.sinfo}", "-h", "--hide", "-o", "%N"])
+        bout, _ = shell.exec([f"{self.execs.sinfo}", "-h", "--hide", "-o", "%N"])
         return NodeDict.parse_str(bout)
 
     def get_partitions(self) -> list[Partition]:
-        bout, berr = shell.exec([f"{self.execs.scontrol}", "show", "partitions"])
+        bout, _ = shell.exec([f"{self.execs.scontrol}", "show", "partitions"])
         return Partition.parse_multiple(bout)
 
     def get_default_partition(self) -> Partition | None:
@@ -138,7 +138,7 @@ class Platform:
         """
         username = getpass.getuser()
 
-        bout, berr = shell.exec([f'{self.execs.squeue}', '-u', username, '-h', '--format=%A'])
+        bout, _ = shell.exec([f'{self.execs.squeue}', '-u', username, '-h', '--format=%A'])
 
         job_ids: list[int] = []
         for line in bout.splitlines():
@@ -219,8 +219,7 @@ class PlatformSchema(Schema):
     def make_platform_conf(self, data, **kwargs):
         return Platform(**data)
 
-    @validates('nodes_include_load')
-    def validate_usr_nodes_include(self, value: dict[str, list[int]]):
+    def unif(self, value: dict[str, list[int]]):
         for key, node_list in value.items():
             if not isinstance(key, str):
                 raise ValidationError("All keys must be strings.")
@@ -229,12 +228,10 @@ class PlatformSchema(Schema):
             if not all(isinstance(node, int) for node in node_list):
                 raise ValidationError(f"All node IDs in '{key}' must be integers.")
 
+    @validates('nodes_include_load')
+    def validate_usr_nodes_include(self, value: dict[str, list[int]]):
+        self.unif(value)
+
     @validates('nodes_exclude_load')
     def validate_usr_nodes_exclude(self, value: dict[str, list[int]]):
-        for key, node_list in value.items():
-            if not isinstance(key, str):
-                raise ValidationError("All keys must be strings.")
-            if not isinstance(node_list, list):
-                raise ValidationError(f"Value for key '{key}' must be a list of integers.")
-            if not all(isinstance(node, int) for node in node_list):
-                raise ValidationError(f"All node IDs in '{key}' must be integers.")
+        self.unif(value)

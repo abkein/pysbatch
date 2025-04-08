@@ -40,10 +40,6 @@ class Execs:
     squeue:   str = "squeue"
     scontrol: str = "scontrol"
 
-    # def __post_init__(self):
-    #     if not self.check():
-    #         raise ConfigurationError()
-
     def check(self) -> bool:
         for exec in [self.sinfo, self.sbatch, self.sacct, self.spoll, self.spolld, self.squeue, self.scontrol]:
             if not is_exe(exec):

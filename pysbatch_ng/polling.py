@@ -157,17 +157,6 @@ class Poller:
             logger.critical("Something went wrong while trying to fork...")
             logger.exception(e)
             raise
-        # cf = f"{self.jobid}_poll_conf.toml"
-        # if self.tag is not None:
-        #     cf = f"{self.tag}" + cf
-        # wfile = self.logfolder / cf
-
-        # with wfile.open('w') as fp:
-        #     toml.dump(d, fp)
-
-        # cmd = f"{self.execs.spolld} --file={wfile.as_posix()}"
-        # cmds = shlex.split(cmd)
-        # subprocess.Popen(cmds, start_new_session=True, env=os.environ.copy())
 
     def __enter__(self) -> Self:
         if not self.check():
@@ -219,7 +208,7 @@ class Poller:
                f"--jobs={job_id}",
                 "--noheader"
             ]
-            bout, berr = shell.exec(cmds)
+            bout, _ = shell.exec(cmds)
             job_infos = parse_sacct_output(bout)
             return job_infos[0]
         except subprocess.CalledProcessError as e:
@@ -229,7 +218,7 @@ class Poller:
 
     def perform_check(self) -> None:
         cmds = [f"{self.__platform.execs.sacct}", f"-j {self.jobid}", "-n", "-p", "-o", "jobid,state"]
-        bout, berr = shell.exec(cmds)
+        bout, _ = shell.exec(cmds)
         for line in bout.splitlines():
             if re.match(r"^\d+\|[a-zA-Z]+\|$", line):
                 self.state = SStates(line.split("|")[1])
@@ -255,7 +244,7 @@ class Poller:
                 logger.error("Unable to get user name, due to following error:")
                 logger.exception(e)
                 raise
-            bout, berr = shell.exec(['who'])
+            bout, _ = shell.exec(['who'])
             ttys = [line.split()[1] for line in bout.splitlines() if line.startswith(user)]
             ttys = [f"/dev/{tty}" for tty in ttys]
             for tty in ttys:

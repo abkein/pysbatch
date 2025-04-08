@@ -55,16 +55,18 @@ def get_call_stack(fname: str | None = None, skip: int = 0, skip_after: int = 0)
 
 
 class UpperLevelFilter(logging.Filter):
-    def __init__(self, max_level: int):
+    max_level: int
+
+    def __init__(self, max_level: int) -> None:
         super().__init__()
         self.max_level = max_level
 
-    def filter(self, record):
+    def filter(self, record) -> bool:
         return record.levelno <= self.max_level
 
 
 class Singleton(type):
-    _instances = {}
+    _instances: dict[Type, "Singleton"] = {}
     def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
@@ -133,51 +135,6 @@ def ranges(i):
         yield b[0][1], b[-1][1]
 
 
-# def ranges_as_list(i):
-#     return list(ranges(i))
-
-
-# def parse_timelimit(limit_str: str) -> int:
-#     """Returns seconds"""
-#     if limit_str == "UNLIMITED":
-#         return -1
-#     else:
-#         pattern = r"^[a-zA-Z\*]*\s+(?:(\d+)-)?(\d{1,2}):(\d{2}):?(?:(\d{2}))?$"
-#         match = re.match(pattern, limit_str)
-#         if match:
-#             days = int(match.group(1)) if match.group(1) else 0
-#             hours = int(match.group(2)) if match.group(2) else 0
-#             minutes = int(match.group(3)) if match.group(3) else 0
-#             seconds = int(match.group(4)) if match.group(4) else 0
-
-#             if 0 <= hours <= 23 and 0 <= minutes <= 59 and 0 <= seconds <= 59:
-#                 return ((days * 24 + hours) * 60 + minutes) * 60 + seconds
-#             else:
-#                 raise RuntimeError(f"Invalid (time components out of range): {limit_str}")
-#         else:
-#             raise RuntimeError(f"Time limit retrieved does not match regular expression: {limit_str}")
-
-
-# def parse_nodes(nodelist_str: str) -> dict[str, set[int]]:
-#     if not re.match(r"^([a-z]+\[(?:\d+(?:-\d+)?,?)*\](?:,\s*[a-z]+\[(?:\d+(?:-\d+)?,?)*\])*)$", nodelist_str):
-#         raise RuntimeError(f"Invalid nodelist: {nodelist_str}")
-#     nodelist: dict[str, set[int]] = {}
-#     for nsl in nodelist_str.split('],'):
-#         nn, nr_s = nsl.strip().replace("]", "").split('[')
-#         nodelist[nn] = set()
-#         for item in nr_s.split(','):
-#             if re.match(r"^\d+-\d+$", item.strip()):
-#                 nra, nrb = item.split('-')
-#                 for i in range(int(nra), int(nrb)+1):
-#                     nodelist[nn].add(i)
-#             elif re.match(r"\d+", item):
-#                 nodelist[nn].add(int(item))
-#             else:
-#                 raise RuntimeError(f"Element not either an integer, nor range: {item}")
-
-#     return nodelist
-
-
 def parse_sacct_output(output: str) -> list[SlurmJobInfo]:
     job_infos = []
     lines = output.strip().split('\n')
@@ -240,7 +197,7 @@ class Shell(metaclass=Singleton):
 
     def __init__(self, *args) -> None:
         if self.__connected: self.__disconnect()
-        return self.configure(*args)
+        self.configure(*args)
 
     def configure(
             self,
@@ -283,7 +240,7 @@ class Shell(metaclass=Singleton):
             case Shell.AuthMeth.AGENT:
                 agent_keys = paramiko.Agent().get_keys()
 
-                if len(agent_keys) == 0: raise Exception(f"Cannot connect to {self.__host}: No keys available from ssh-agent")
+                if len(agent_keys) == 0: raise ConnectionError(f"Cannot connect to {self.__host}: No keys available from ssh-agent")
 
                 for key in agent_keys:
                     try:
@@ -294,7 +251,7 @@ class Shell(metaclass=Singleton):
                     except paramiko.AuthenticationException: logger.debug("Authentication failed with this key.")
                     except paramiko.SSHException as e:       logger.error(f"SSH error: {e}")
                     except Exception as e:                   logger.error(f"An unexpected error occurred: {e}")
-                else: raise Exception("Failed to authenticate with any available keys.")
+                else: raise ConnectionError("Failed to authenticate with any available keys.")
         self.__connected = True
 
     def __disconnect(self) -> None:
@@ -326,7 +283,7 @@ class Shell(metaclass=Singleton):
 
     def remote_exec(self, cmds: list[str]) -> tuple[str, str]:
         if not self.__connected: self.__connect()
-        stdin, stdout, stderr = self.__ssh.exec_command(shlex.join(cmds))
+        _, stdout, stderr = self.__ssh.exec_command(shlex.join(cmds))
         if not self.__context_present: self.__disconnect()
         return stdout.read().decode().strip(), stderr.read().decode().strip()
 
@@ -334,20 +291,6 @@ class Shell(metaclass=Singleton):
 
 
 shell = Shell()
-
-
-# def wexec(cmds: list[str]) -> tuple[str, str]:
-#     logger.debug(f"Calling '{cmds}'")
-#     try:
-#         proc = subprocess.run(cmds, capture_output=True, check=True, env=os.environ.copy())
-#     except subprocess.CalledProcessError as e:
-#         logger.error("Process returned non-zero exitcode")
-#         logger.error("Output from stdout:")
-#         logger.error(e.stdout)
-#         logger.error("Output from stderr:")
-#         logger.error(e.stderr)
-#         raise
-#     return proc.stdout.decode().strip(), proc.stderr.decode().strip()
 
 
 def load_conf(file: Path) -> dict[str, Any] | None:

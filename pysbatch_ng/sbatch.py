@@ -181,7 +181,7 @@ class Sbatch:
             f"{self.platform.execs.sbatch}",
             f"{job_file}"
         ]
-        bout, berr = shell.exec(cmds)
+        bout, _ = shell.exec(cmds)
 
         if re.match(r'Submitted batch job \d+', bout):
             try:
