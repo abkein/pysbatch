@@ -1,2 +1,4 @@
 Mpoll_sample_conf.toml
 .venv/
+.sonarlint
+shell.nix
