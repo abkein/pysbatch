@@ -6,8 +6,6 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 26-10-2024 09:32:44
-
 import os
 import re
 import sys
@@ -33,7 +31,7 @@ class PollerSchema(Schema):
     execs = fields.Nested(PlatformSchema, missing=None)
     jobid = fields.Integer(allow_none=True, missing=None)
     debug = fields.Boolean(default=True, missing=True)
-    logto = fields.String(default='file', missing='file', validate=validate.OneOf(log2list))
+    logto = fields.String(default="file", missing="file", validate=validate.OneOf(log2list))
 
     tag = fields.Integer(allow_none=True, missing=None)
     every = fields.Integer(missing=5)
@@ -42,7 +40,7 @@ class PollerSchema(Schema):
     lockfilename = fields.String(allow_none=True, default="auto", missing=None)
 
     logfolder = fields.String(allow_none=True, missing=None, load_only=True)
-    logfolder_p = FieldPath(default=Path.cwd(), attribute='logfolder', data_key='logfolder', dump_only=True)
+    logfolder_p = FieldPath(default=Path.cwd(), attribute="logfolder", data_key="logfolder", dump_only=True)
     cwd = FieldPath(missing=Path.cwd())
 
     @post_load
@@ -78,14 +76,14 @@ class Poller:
         jobid: int | None = None,
         cmd: str | None = None,
         debug: bool = True,
-        logto: log2type = 'both',
+        logto: log2type = "both",
         tag: int | None = None,
         every: int = 5,
         times_criteria: int = 288,
         logfolder: str | None = None,
         lockfilename: str | None = None,
         cwd: Path | None = None,
-        platform: Platform | None = None
+        platform: Platform | None = None,
     ):
         self.jobid = jobid
         self.cmd = cmd
@@ -189,7 +187,8 @@ class Poller:
                 logger.info(f"Launching: {self.cmd}")
                 cmds = shlex.split(self.cmd)
                 proc = subprocess.run(cmds, capture_output=True, check=True, env=os.environ.copy())
-                if proc.returncode == 0: logger.info("Succesfully launched command.")
+                if proc.returncode == 0:
+                    logger.info("Succesfully launched command.")
                 else:
                     logger.warning(f"Command returned non-zero exit code: {proc.returncode}.")
                     logger.warning("Command stdout:")
@@ -202,11 +201,11 @@ class Poller:
     def get_slurm_job_info(self, job_id: int) -> SlurmJobInfo:
         assert job_id > 0
         try:
-            cmds =  [
+            cmds = [
                 f"{self.__platform.execs.sacct}",
                 "--format=JobID%-15,JobName%-20,Partition%-15,User%-20,Account%-20,NNodes%-10,State%-30,ExitCode%-15",
-               f"--jobs={job_id}",
-                "--noheader"
+                f"--jobs={job_id}",
+                "--noheader",
             ]
             bout, _ = shell.exec(cmds)
             job_infos = parse_sacct_output(bout)
@@ -226,34 +225,40 @@ class Poller:
         self.state = SStates.UNKNOWN_STATE
 
     def start_loop(self) -> bool:
-        if self.__allow: return self.__loop()
+        if self.__allow:
+            return self.__loop()
         else:
             logger.error("Did you entered context?")
             return False
 
     @property
-    def state(self) -> SStates: return self.__current_state
+    def state(self) -> SStates:
+        return self.__current_state
 
     @state.setter
-    def state(self, state: SStates) -> None: self.__current_state = state
+    def state(self, state: SStates) -> None:
+        self.__current_state = state
 
     def inform_user(self, message: str) -> None:
         try:
-            try: user = getpass.getuser()
+            try:
+                user = getpass.getuser()
             except OSError as e:
                 logger.error("Unable to get user name, due to following error:")
                 logger.exception(e)
                 raise
-            bout, _ = shell.exec(['who'])
+            bout, _ = shell.exec(["who"])
             ttys = [line.split()[1] for line in bout.splitlines() if line.startswith(user)]
             ttys = [f"/dev/{tty}" for tty in ttys]
             for tty in ttys:
-                with open(tty, 'w') as term: term.write(f"\n{message}\n")
-        except Exception as e: logger.error("Unable to notify user")
+                with open(tty, "w") as term:
+                    term.write(f"\n{message}\n")
+        except Exception as e:
+            logger.error("Unable to notify user")
 
     def __loop(self) -> bool:
         last_state = self.state
-        last_state_times: int = 0
+        last_state_times = 0
 
         logger.info("Started main loop")
 
@@ -261,109 +266,183 @@ class Poller:
             while True:
                 time.sleep(self.every)
                 logger.info("Checking job")
-                try: self.perform_check()
-                except Exception as e:
-                    logger.critical("Check failed due to exception:")
-                    logger.exception(e)
-                    self.inform_user(f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) check failed due to exception, cwd: {self.__cwd.as_posix()}")
-                    raise
-                logger.info(f"Job state: {str(self.state)}")
 
-                if self.state in states_to_end:
-                    logger.info(f"Reached end state: {str(self.state)}. Exiting loop")
-                    self.__ok = True
-                    self.inform_user(f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) reached end state, cwd: {self.__cwd.as_posix()}")
-                    return True
-                elif self.state in failure_states:
-                    logger.error(f"Something went wrong with slurm job. State: {str(self.state)} Exiting...")
-                    self.__ok = True
-                    self.inform_user(f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) Something went wrong with slurm job. State: {str(self.state)}. cwd: {self.__cwd.as_posix()}")
+                if not self._safe_perform_check():
                     return False
-                # elif self.state == SStates.UNKNOWN_STATE:
-                #     logger.error(f"Unknown slurm job state. Exiting...")
-                #     self.ok()
-                #     return False
-                elif self.state == SStates.PENDING:
-                    logger.info("Pending...")
-                elif self.state == SStates.RUNNING:
-                    last_state = self.state
-                    last_state_times = 0
-                    logger.info("RUNNING")
-                else:  # state != SStates.RUNNING:
-                    if self.state == last_state:
-                        last_state_times += 1
-                        if last_state_times > self.times_criteria:
-                            logger.error(f"State {self.state} was too long (>{self.times_criteria} times). Exiting...")
-                            self.inform_user(f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) State {self.state} was too long, cwd: {self.__cwd.as_posix()}")
-                            self.__ok = True
-                            return False
-                        else: logger.info(f"State {self.state} still for {self.times_criteria} times")
-                    else:
-                        last_state = self.state
-                        last_state_times = 0
-                        logger.warning(f"Strange state {self.state} encountered")
+
+                logger.info(f"Job state: {self.state}")
+
+                # Handle states with early returns
+                if self._handle_terminal_states():
+                    return self.__ok
+
+                if self._handle_running_state():
+                    last_state, last_state_times = self.state, 0
+                    continue
+
+                # Handle other states
+                last_state, last_state_times = self._handle_other_states(last_state, last_state_times)
 
         except Exception as e:
             logger.critical("Uncaught exception")
             logger.exception(e)
             return False
 
-    def set_action(self, action: Actions) -> None: self.__action = action
+    def _safe_perform_check(self) -> bool:
+        """Run perform_check safely, log and inform user on exception."""
+        try:
+            self.perform_check()
+            return True
+        except Exception as e:
+            logger.critical("Check failed due to exception:")
+            logger.exception(e)
+            self.inform_user(
+                f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) check failed due to exception, "
+                f"cwd: {self.__cwd.as_posix()}"
+            )
+            return False
+
+    def _handle_terminal_states(self) -> bool:
+        """Handle states that cause loop exit."""
+        if self.state in states_to_end:
+            logger.info(f"Reached end state: {self.state}. Exiting loop")
+            self.__ok = True
+            self.inform_user(
+                f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) reached end state, cwd: {self.__cwd.as_posix()}"
+            )
+            return True
+
+        if self.state in failure_states:
+            logger.error(f"Something went wrong with slurm job. State: {self.state} Exiting...")
+            self.__ok = False
+            self.inform_user(
+                f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) Something went wrong with slurm job. "
+                f"State: {self.state}. cwd: {self.__cwd.as_posix()}"
+            )
+            return True
+
+        return False
+
+    def _handle_running_state(self) -> bool:
+        """Handle the running state, reset counters if changed."""
+        if self.state == SStates.RUNNING:
+            logger.info("RUNNING")
+            return True
+        elif self.state == SStates.PENDING:
+            logger.info("Pending...")
+        return False
+
+    def _handle_other_states(self, last_state, last_state_times):
+        """Handle non-terminal, non-running states."""
+        if self.state == last_state:
+            last_state_times += 1
+            if last_state_times > self.times_criteria:
+                logger.error(f"State {self.state} was too long (>{self.times_criteria} times). Exiting...")
+                self.inform_user(
+                    f"spoll (PID: {os.getpid()}, jobid: {self.jobid}) State {self.state} was too long, "
+                    f"cwd: {self.__cwd.as_posix()}"
+                )
+                self.__ok = False
+                raise StopIteration  # used to break out of the loop gracefully
+            else:
+                logger.info(f"State {self.state} still for {last_state_times} times")
+        else:
+            logger.warning(f"Strange state {self.state} encountered")
+            last_state_times = 0
+
+        return self.state, last_state_times
+
+    def set_action(self, action: Actions) -> None:
+        self.__action = action
 
     def decide(self) -> bool:
         match self.__action:
-            case Actions.start:   self.start_loop()
-            case Actions.detach:  self.detach_start()
-            case Actions.genconf: self.genconf()
-            case _: return False
+            case Actions.start:
+                self.start_loop()
+            case Actions.detach:
+                self.detach_start()
+            case Actions.genconf:
+                self.genconf()
+            case _:
+                return False
         return True
 
     @classmethod
     def from_schema(cls, data: dict[str, Any]):
         spoll = PollerSchema().load(data)
-        if not isinstance(spoll, Poller): raise ValueError(f"Unable to load {cls.__name__} from data (dev bug:{__file__}:{inspect.currentframe().f_code.co_name})")  # type: ignore
+        if not isinstance(spoll, Poller):
+            raise ValueError(f"Unable to load {cls.__name__} from data (dev bug:{__file__}:{inspect.currentframe().f_code.co_name})")  # type: ignore
         return spoll
 
     def dump_schema(self) -> dict[str, Any]:
         data = PollerSchema().dump(self)
-        if not isinstance(data, dict): raise ValueError(f"Unable to dump {self.__class__.__name__} to data (dev bug:{__file__}:{inspect.currentframe().f_code.co_name})")  # type: ignore
+        if not isinstance(data, dict):
+            raise ValueError(f"Unable to dump {self.__class__.__name__} to data (dev bug:{__file__}:{inspect.currentframe().f_code.co_name})")  # type: ignore
         return data
 
     @classmethod
     def from_args(cls) -> "Poller":
         parser = argparse.ArgumentParser(prog="spolld")
-        parser.add_argument('action', choices=list(Actions), type=str, help=
-                            """Action to perform:
+        parser.add_argument(
+            "action",
+            choices=list(Actions),
+            type=str,
+            help="""Action to perform:
                             start: start
                             detach: start in the background
                             genconf: Generate sample configuration file and exit (Default file: ./spoll_sample_conf.toml), see also --file option"
-                            """)
+                            """,
+        )
         parser.add_argument("--debug", action="store_true", help="Debug. Default: False")
-        parser.add_argument('--log', choices=['screen', 'file', 'both', 'off'], help="Whether to log to screen, to file or both or off logging. Default: file")
+        parser.add_argument(
+            "--log",
+            choices=["screen", "file", "both", "off"],
+            help="Whether to log to screen, to file or both or off logging. Default: file",
+        )
         parser.add_argument("--jobid", action="store", type=int, help="Slurm job ID")
         parser.add_argument("--tag", action="store", type=int, help="Project tag (arbitrary int number) (optional)")
         parser.add_argument("--every", action="store", type=int, help="Perform poll every N-minutes. Default: 5")
-        parser.add_argument("--tc", action="store", type=int, help="Criteria to wait a normal state (times of chech). Default: 288 (a day)")
+        parser.add_argument(
+            "--tc",
+            action="store",
+            type=int,
+            help="Criteria to wait a normal state (times of chech). Default: 288 (a day)",
+        )
         parser.add_argument("--cmd", action="store", type=str, help="CMD to run after")
-        parser.add_argument("--file", action="store", type=str, help="Read configuration from TOML configuration file (cli arguments owerwrite file ones)")
-        parser.add_argument("--logfolder", action="store", type=str, help="Folder whether to store logs. Default: cwd/log/slurm")
+        parser.add_argument(
+            "--file",
+            action="store",
+            type=str,
+            help="Read configuration from TOML configuration file (cli arguments owerwrite file ones)",
+        )
+        parser.add_argument(
+            "--logfolder", action="store", type=str, help="Folder whether to store logs. Default: cwd/log/slurm"
+        )
         parser.add_argument("--cwd", action="store", type=str, help="Current working directory. Default: cwd")
 
         args = parser.parse_args()
 
         conf: dict[str, Any] = {}
         if args.file:
-            with Path(args.file).resolve().open('r') as fp: conf = toml.load(fp)
+            with Path(args.file).resolve().open("r") as fp:
+                conf = toml.load(fp)
 
         obj_dict: dict[str, Any] = {}
 
-        if args.cwd   is not None: obj_dict["cwd"]            = args.cwd
-        if args.jobid is not None: obj_dict["jobid"]          = args.jobid
-        if args.tag   is not None: obj_dict["tag"]            = args.tag
-        if args.log   is not None: obj_dict["logto"]          = args.log
-        if args.cmd   is not None: obj_dict["cmd"]            = args.cmd
-        if args.every is not None: obj_dict["every"]          = args.every
-        if args.tc    is not None: obj_dict["times_criteria"] = args.tc
+        if args.cwd is not None:
+            obj_dict["cwd"] = args.cwd
+        if args.jobid is not None:
+            obj_dict["jobid"] = args.jobid
+        if args.tag is not None:
+            obj_dict["tag"] = args.tag
+        if args.log is not None:
+            obj_dict["logto"] = args.log
+        if args.cmd is not None:
+            obj_dict["cmd"] = args.cmd
+        if args.every is not None:
+            obj_dict["every"] = args.every
+        if args.tc is not None:
+            obj_dict["times_criteria"] = args.tc
 
         conf.update(**obj_dict)
 
@@ -371,7 +450,8 @@ class Poller:
         poller.set_action(Actions(args.action))
         return poller
 
-    def genconf(self) -> None: print(toml.dumps(self.dump_schema()))
+    def genconf(self) -> None:
+        print(toml.dumps(self.dump_schema()))
 
 
 def main() -> int:
@@ -379,4 +459,5 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__": sys.exit(main())
+if __name__ == "__main__":
+    sys.exit(main())
