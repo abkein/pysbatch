@@ -34,14 +34,14 @@ def minilog(name: str) -> logging.Logger:
     logger.handlers.clear()
     logger.setLevel(logging.DEBUG)
     formatter: logging.Formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s')
-    soutHandler = logging.StreamHandler(stream=sys.stdout)
-    soutHandler.setLevel(logging.DEBUG)
-    soutHandler.setFormatter(formatter)
-    logger.addHandler(soutHandler)
-    serrHandler = logging.StreamHandler(stream=sys.stderr)
-    serrHandler.setFormatter(formatter)
-    serrHandler.setLevel(logging.WARNING)
-    logger.addHandler(serrHandler)
+    sout_handler = logging.StreamHandler(stream=sys.stdout)
+    sout_handler.setLevel(logging.DEBUG)
+    sout_handler.setFormatter(formatter)
+    logger.addHandler(sout_handler)
+    serr_handler = logging.StreamHandler(stream=sys.stderr)
+    serr_handler.setFormatter(formatter)
+    serr_handler.setLevel(logging.WARNING)
+    logger.addHandler(serr_handler)
     return logger
 
 
@@ -101,20 +101,20 @@ def configure_logger(logto: log2type, logfile: Path | None = None, debug: bool =
     if logto == 'file' or logto == 'both':
         if logfile is None:
             raise ValueError("Logfile is not specified")
-        FileHandler = logging.FileHandler(logfile)
-        FileHandler.setFormatter(formatter)
-        FileHandler.setLevel(logging.DEBUG)
-        logger.addHandler(FileHandler)
+        file_handler = logging.FileHandler(logfile)
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(logging.DEBUG)
+        logger.addHandler(file_handler)
     if logto == 'screen' or logto == 'both':
-        soutHandler = logging.StreamHandler(stream=sys.stdout)
-        soutHandler.setLevel(logging.DEBUG)
-        soutHandler.setFormatter(formatter)
-        soutHandler.addFilter(UpperLevelFilter(logging.WARNING))
-        logger.addHandler(soutHandler)
-        serrHandler = logging.StreamHandler(stream=sys.stderr)
-        serrHandler.setFormatter(formatter)
-        serrHandler.setLevel(logging.WARNING)
-        logger.addHandler(serrHandler)
+        sout_handler = logging.StreamHandler(stream=sys.stdout)
+        sout_handler.setLevel(logging.DEBUG)
+        sout_handler.setFormatter(formatter)
+        sout_handler.addFilter(UpperLevelFilter(logging.WARNING))
+        logger.addHandler(sout_handler)
+        serr_handler = logging.StreamHandler(stream=sys.stderr)
+        serr_handler.setFormatter(formatter)
+        serr_handler.setLevel(logging.WARNING)
+        logger.addHandler(serr_handler)
 
     if logto == 'off':
         logger.propagate = False
@@ -231,6 +231,21 @@ class Shell(metaclass=Singleton):
         self.__ssh = SSHClient()
         self.__ssh.set_missing_host_key_policy(paramiko.RejectPolicy())
 
+    def __connect_via_agent(self) -> None:
+        agent_keys = paramiko.Agent().get_keys()
+        if len(agent_keys) == 0: raise ConnectionError(f"Cannot connect to {self.__host}: No keys available from ssh-agent")
+
+        for key in agent_keys:
+            try:
+                logger.debug(f"Trying key: {key.get_fingerprint()}")
+                self.__ssh.connect(hostname=self.__host, port=self.__port, username=self.__username, pkey=key)
+                logger.info("Connection successful!")
+                break
+            except paramiko.AuthenticationException: logger.debug("Authentication failed with this key.")
+            except paramiko.SSHException as e:       logger.error(f"SSH error: {e}")
+            except Exception as e:                   logger.error(f"An unexpected error occurred: {e}")
+        else: raise ConnectionError("Failed to authenticate with any available keys.")
+
     def __connect(self) -> None:
         if self.__local or self.__connected: return
         match self.__authmeth:
@@ -238,20 +253,7 @@ class Shell(metaclass=Singleton):
             case Shell.AuthMeth.NOPASS: self.__ssh.connect(hostname=self.__host, port=self.__port, username=self.__username)
             case Shell.AuthMeth.KEYFILE: self.__ssh.connect(hostname=self.__host, port=self.__port, username=self.__username, key_filename=self.__keyfile.resolve().as_posix())
             case Shell.AuthMeth.AGENT:
-                agent_keys = paramiko.Agent().get_keys()
-
-                if len(agent_keys) == 0: raise ConnectionError(f"Cannot connect to {self.__host}: No keys available from ssh-agent")
-
-                for key in agent_keys:
-                    try:
-                        logger.debug(f"Trying key: {key.get_fingerprint()}")
-                        self.__ssh.connect(hostname=self.__host, port=self.__port, username=self.__username, pkey=key)
-                        logger.info("Connection successful!")
-                        break
-                    except paramiko.AuthenticationException: logger.debug("Authentication failed with this key.")
-                    except paramiko.SSHException as e:       logger.error(f"SSH error: {e}")
-                    except Exception as e:                   logger.error(f"An unexpected error occurred: {e}")
-                else: raise ConnectionError("Failed to authenticate with any available keys.")
+                self.__connect_via_agent()
         self.__connected = True
 
     def __disconnect(self) -> None:
