@@ -23,7 +23,7 @@ class Node:
     def from_string(cls, string: str):
         instance = cls.__new__(cls)
 
-        name, idx_str = string.split('_')
+        name, idx_str = string.split("_")
         instance.name = name
         instance.idx = int(idx_str)
         return instance
@@ -34,7 +34,7 @@ def node_tpl2str(name: str, idx: int) -> str:
 
 
 def node_str2tpl(node: str) -> tuple[str, int]:
-    name, idx_str = node.split('_')
+    name, idx_str = node.split("_")
     return (name, int(idx_str))
 
 
@@ -47,11 +47,15 @@ class Platform:
     nodelist: NodeDict
     partitions: list[Partition]
 
-    def __init__(self, execs: Execs | None = None, nodes_include: str | None = None, nodes_exclude: str | None = None) -> None:
+    def __init__(
+        self, execs: Execs | None = None, nodes_include: str | None = None, nodes_exclude: str | None = None
+    ) -> None:
         super().__init__()
         self.execs = execs if execs is not None else Execs()
-        if nodes_exclude is not None: self.usr_nodes_exclude = NodeDict.parse_str(nodes_exclude)
-        if nodes_include is not None: self.usr_nodes_include = NodeDict.parse_str(nodes_include)
+        if nodes_exclude is not None:
+            self.usr_nodes_exclude = NodeDict.parse_str(nodes_exclude)
+        if nodes_include is not None:
+            self.usr_nodes_include = NodeDict.parse_str(nodes_include)
         self.__update()
 
     def __update(self) -> bool:
@@ -69,14 +73,17 @@ class Platform:
 
         long_usr_nodes_include: set[str] = set()
         if self.usr_nodes_include is not None:
-            for name, ids in self.usr_nodes_include.items(): long_usr_nodes_include.update({node_tpl2str(name, id) for id in ids})
+            for name, ids in self.usr_nodes_include.items():
+                long_usr_nodes_include.update({node_tpl2str(name, id) for id in ids})
 
         long_usr_nodes_exclude: set[str] = set()
         if self.usr_nodes_exclude is not None:
-            for name, ids in self.usr_nodes_exclude.items(): long_usr_nodes_exclude.update({node_tpl2str(name, id) for id in ids})
+            for name, ids in self.usr_nodes_exclude.items():
+                long_usr_nodes_exclude.update({node_tpl2str(name, id) for id in ids})
 
         long_nodelist: set[str] = set()
-        for name, ids in self.nodelist.items(): long_nodelist.update({node_tpl2str(name, id) for id in ids})
+        for name, ids in self.nodelist.items():
+            long_nodelist.update({node_tpl2str(name, id) for id in ids})
 
         was_empty = len(long_usr_nodes_include) == 0
 
@@ -86,7 +93,9 @@ class Platform:
             long_usr_nodes_include.difference_update(nonexistent)
             long_usr_nodes_exclude.difference_update(nonexistent)
         if len(long_usr_nodes_include & long_usr_nodes_exclude) != 0:
-            logger.error(f"There were nodes both in include and exclude lists: {long_usr_nodes_include & long_usr_nodes_exclude}")
+            logger.error(
+                f"There were nodes both in include and exclude lists: {long_usr_nodes_include & long_usr_nodes_exclude}"
+            )
             return False
 
         if was_empty:
@@ -101,16 +110,18 @@ class Platform:
             return False
 
         new_include: dict[str, set[int]] = {}
-        for k,v in [node_str2tpl(_node) for _node in long_usr_nodes_include]:
-            if k not in new_include: new_include[k] = set()
+        for k, v in [node_str2tpl(_node) for _node in long_usr_nodes_include]:
+            if k not in new_include:
+                new_include[k] = set()
             new_include[k].add(v)
-        self.nodes_include  = NodeDict(new_include)
+        self.nodes_include = NodeDict(new_include)
 
         new_exclude: dict[str, set[int]] = {}
-        for k,v in [node_str2tpl(_node) for _node in long_usr_nodes_exclude]:
-            if k not in new_exclude: new_exclude[k] = set()
+        for k, v in [node_str2tpl(_node) for _node in long_usr_nodes_exclude]:
+            if k not in new_exclude:
+                new_exclude[k] = set()
             new_exclude[k].add(v)
-        self.nodes_exclude  = NodeDict(new_exclude)
+        self.nodes_exclude = NodeDict(new_exclude)
 
         return True
 
@@ -124,12 +135,14 @@ class Platform:
 
     def get_default_partition(self) -> Partition | None:
         for part in self.partitions:
-            if part.Default: return part
+            if part.Default:
+                return part
         return None
 
     def get_partition(self, name: str) -> Partition | None:
         for part in self.partitions:
-            if part.PartitionName == name: return part
+            if part.PartitionName == name:
+                return part
         return None
 
     def get_active_jobids(self) -> list[int]:
@@ -138,7 +151,7 @@ class Platform:
         """
         username = getpass.getuser()
 
-        bout, _ = shell.exec([f'{self.execs.squeue}', '-u', username, '-h', '--format=%A'])
+        bout, _ = shell.exec([f"{self.execs.squeue}", "-u", username, "-h", "--format=%A"])
 
         job_ids: list[int] = []
         for line in bout.splitlines():
@@ -184,7 +197,7 @@ class PlatformSchema(Schema):
         default={},
         attribute="usr_nodes_include",
         data_key="nodes_include",
-        dump_only=True
+        dump_only=True,
     )
     nodes_exclude_dump = fields.Dict(
         keys=fields.Str(),
@@ -193,7 +206,7 @@ class PlatformSchema(Schema):
         default={},
         attribute="usr_nodes_exclude",
         data_key="nodes_exclude",
-        dump_only=True
+        dump_only=True,
     )
 
     nodes_include_load = fields.Dict(
@@ -203,7 +216,7 @@ class PlatformSchema(Schema):
         default={},
         attribute="nodes_include",
         data_key="nodes_include",
-        load_only=True
+        load_only=True,
     )
     nodes_exclude_load = fields.Dict(
         keys=fields.Str(),
@@ -212,7 +225,7 @@ class PlatformSchema(Schema):
         default={},
         attribute="nodes_exclude",
         data_key="nodes_exclude",
-        load_only=True
+        load_only=True,
     )
 
     @post_load
@@ -228,10 +241,10 @@ class PlatformSchema(Schema):
             if not all(isinstance(node, int) for node in node_list):
                 raise ValidationError(f"All node IDs in '{key}' must be integers.")
 
-    @validates('nodes_include_load')
+    @validates("nodes_include_load")
     def validate_usr_nodes_include(self, value: dict[str, list[int]]):
         self.unif(value)
 
-    @validates('nodes_exclude_load')
+    @validates("nodes_exclude_load")
     def validate_usr_nodes_exclude(self, value: dict[str, list[int]]):
         self.unif(value)
