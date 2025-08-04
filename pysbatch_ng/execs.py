@@ -6,8 +6,6 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-# Last modified: 26-10-2024 09:32:44
-
 import inspect
 from typing import Any
 from pathlib import Path
@@ -70,6 +68,7 @@ class ExecsSchema(Schema):
 
     @post_load
     def make_execs_conf(self, data, **kwargs) -> Execs: return Execs(**data)
+
 
 if __name__ == "__main__":
     pass
