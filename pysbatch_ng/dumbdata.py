@@ -145,7 +145,7 @@ class NodeDict(dict):
             if re.match(r"\d+", numspec): nodedict[hostname].add(int(numspec))
             else:
                 for st in numspec[1:-1].split(','):
-                    nums: tuple[int, ...] = tuple([int(x) for x in st.split('-')])
+                    nums: tuple[int, ...] = tuple(int(x) for x in st.split('-'))
                     match len(nums):
                         case 1: nodedict[hostname].add(nums[0])
                         case 2: nodedict[hostname].update(range(nums[0], nums[1]+1))
