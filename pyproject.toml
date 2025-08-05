@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pysbatch-ng"
+name = "pysbatch"
 version = "0.0.4"
 authors = [{ name = "Egor Perevoshchikov", email = "abkein@abkein.ru" }]
 description = "A package for continiously running LAMMPS on HPC systems with SLURM workload manager, where execution time is limited"
@@ -23,9 +23,9 @@ classifiers = [
 dependencies = ['toml', 'marshmallow', 'paramiko']
 
 [project.scripts]
-spoll = "pysbatch_ng.spoll:main"
-spolld = "pysbatch_ng.polling:main"
-pysbatch = "pysbatch_ng.sbatch:main"
+spoll = "pysbatch.spoll:main"
+spolld = "pysbatch.polling:main"
+pysbatch = "pysbatch.sbatch:main"
 
 [project.urls]
 "Homepage" = "https://github.com/Architect0rr/MDDPN"
